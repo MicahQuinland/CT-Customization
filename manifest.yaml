@@ -16,6 +16,7 @@ resources:
         # Observe the names of your existing OUs and comment out or uncomment below to match yours.
         - Security # Foremerly Core
         - Sandbox # Formerly Custom
+        - Enroll OU2
         #- Core
         #- Custom
 
@@ -29,6 +30,7 @@ resources:
         # Observe the names of your existing OUs and comment out or uncomment these to match yours.
         - Security # Foremerly Core
         - Sandbox # Formerly Custom
+        - Enroll OU2
         #- Core
         #- Custom
     regions:
@@ -47,6 +49,7 @@ resources:
         # Observe the names of your existing OUs and comment out or uncomment these to match yours.
         - Security # Foremerly Core
         - Sandbox # Formerly Custom
+        - Enroll OU2
         #- Core
         #- Custom
     regions:
