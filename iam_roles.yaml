@@ -1196,23 +1196,6 @@ Resources:
         - !Ref 'ResponderPolicy'
       RoleName: "ResponderRole"
 
-  ResponderCanAssumeRole:
-    Type: "AWS::IAM::ManagedPolicy"
-    Properties:
-      Description: Allow incident responders to assume role.
-      Path: /
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          -
-            Effect: Allow
-            Action: sts:AssumeRole
-            Resource:
-              - !GetAtt [ResponderRole, Arn]
-      Groups:
-        - "IncidentResponders"
-      ManagedPolicyName: "ResponderCanAssume"
-
   NetAdmin:
     Type: AWS::IAM::Role
     Properties:
