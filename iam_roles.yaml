@@ -1,0 +1,1818 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create IAM Roles to be associated with a SAML Identity Provider
+Parameters:
+  StackPrefix:
+    Description: Prefix used for naming iam roles in the format ${StackPrefix}-<iam_roles>
+    Type: String
+    Default: SAML
+  SAMLProviderName:
+    Description: SAML provider name
+    Type: String
+    Default: ADFS
+  LogRythmS3BucketName:
+    Description: Name of the S3 bucket for LogRythm access
+    Type: String
+    Default: "redlock-*"
+  # CreateDivvyCloudPowerRole:
+  #   Description: Decide whether to create the Divvy Cloud Power Role
+  #   Type: String
+  #   Default: false
+  #   AllowedValues: [true, false]
+  AffionIPMonitorRole:
+    Description: Creates the Affinion_IP_Monitor_Role if it doesn't already exist
+    Type: String
+    Default: false
+    AllowedValues: [true, false] 
+  ForceMFAPolicy:
+    Description: Creates the Force_MFA_Policy if it doesn't already exist
+    Type: String
+    Default: false
+    AllowedValues: [true, false] 
+  GuardDutyAdministratorAccountId:
+    Type: String
+    Description: AWS Account Id of the administrator account (the account in which will recieve GuardDuty findings from member accounts).
+    MaxLength: 12
+    MinLength: 12
+    Default: "545886510617"
+  DocumentationBucketName:
+    Description: Name of the Documentation bucket
+    Type: String
+    Default: "test-scp-micah1"
+  AffionIPAdministratorAccountId:
+    Type: String
+    Description: AWS Account Id of the administrator account (the master account for Affinion IP).
+    MaxLength: 12
+    MinLength: 12
+    Default: "545886510617"
+
+
+Conditions:
+  ConditionalTrue:
+    !Equals [true, true]
+  ConditionalFalse:
+    !Equals [true, false]
+  ConditionalAffionIPMonitorRole:
+    !Equals [true, !Ref AffionIPMonitorRole]
+  
+
+Resources:
+  # ForceMFAManagedPolicy:
+  #   Type: 'AWS::IAM::ManagedPolicy'
+  #   Properties:
+  #     Description: Forces MFA
+  #     ManagedPolicyName: MFA_Force
+  #     Path: /
+  #     PolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Sid: AllowAllUsersToListAccounts
+  #           Effect: Allow
+  #           Action:
+  #             - 'iam:ListAccountAliases'
+  #             - 'iam:ListUsers'
+  #           Resource:
+  #             - !Sub 'arn:aws:iam::${AWS::AccountId}:user/*'
+  #         - Sid: AllowIndividualUserToSeeTheirAccountInformation
+  #           Effect: Allow
+  #           Action:
+  #             - 'iam:ChangePassword'
+  #             - 'iam:CreateLoginProfile'
+  #             - 'iam:DeleteLoginProfile'
+  #             - 'iam:GetAccountPasswordPolicy'
+  #             - 'iam:GetAccountSummary'
+  #             - 'iam:GetLoginProfile'
+  #             - 'iam:UpdateLoginProfile'
+  #           Resource:
+  #             - !Sub 
+  #               - 'arn:aws:iam::${AWS::AccountId}:user/${user_var}'
+  #               - user_var: '${aws:username}'
+  #         - Sid: AllowIndividualUserToListTheirMFA
+  #           Effect: Allow
+  #           Action:
+  #             - 'iam:ListVirtualMFADevices'
+  #             - 'iam:ListMFADevices'
+  #           Resource:
+  #             - !Sub 'arn:aws:iam::${AWS::AccountId}:mfa/*'
+  #             - !Sub 
+  #               - 'arn:aws:iam::${AWS::AccountId}:user/${user_var}'
+  #               - user_var: '${aws:username}'
+  #         - Sid: AllowIndividualUserToManageThierMFA
+  #           Effect: Allow
+  #           Action:
+  #             - 'iam:CreateVirtualMFADevice'
+  #             - 'iam:DeactivateMFADevice'
+  #             - 'iam:DeleteVirtualMFADevice'
+  #             - 'iam:EnableMFADevice'
+  #             - 'iam:ResyncMFADevice'
+  #           Resource:
+  #             - !Sub 
+  #               - 'arn:aws:iam::${AWS::AccountId}:mfa/${user_var}'
+  #               - user_var: '${aws:username}'
+  #             - !Sub 
+  #               - 'arn:aws:iam::${AWS::AccountId}:user/${user_var}'
+  #               - user_var: '${aws:username}'
+
+  # # AdminRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Condition:
+  #             StringEquals:
+  #               "SAML:aud": "https://signin.aws.amazon.com/saml"
+  #           Principal:
+  #             Federated:
+  #               - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/ADFS"
+  #           Action: "sts:AssumeRoleWithSAML"
+  #     RoleName: adfs-administrators
+  #     ManagedPolicyArns:
+  #       -  !Sub "arn:aws:iam::${AWS::AccountId}:policy/MFA_Force"
+  #       - arn:aws:iam::aws:policy/AdministratorAccess
+  #     Path: /
+
+  DevOpsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+      RoleName: adfs-devops      
+      Path: /
+
+  DeveloperRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+      RoleName: adfs-developers
+      ManagedPolicyArns:      
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      Path: /
+
+  GovernanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+      RoleName: adfs-governance
+      Path: /
+
+
+  DbaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+      RoleName: adfs-dba
+      ManagedPolicyArns:      
+        - arn:aws:iam::aws:policy/AmazonRDSFullAccess   
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess   
+      Path: /
+
+  l2supportRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+      RoleName: adfs-l2support
+      ManagedPolicyArns:      
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess   
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess   
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess   
+      Path: /
+
+ # #DbaRolePolicy:
+ #    Type: AWS::IAM::ManagedPolicy
+ #    Properties:
+ #      Description: "Policy for DBA role"
+ #      ManagedPolicyName: Dba_Role_Policy
+ #      Path: /
+ #      Roles:
+ #        - Ref: DbaRole
+ #      PolicyDocument:
+ #        Version: 2012-10-17
+ #        Statement:
+ #          - Action:
+ #              - "lambda:InvokeFunction"
+ #            Effect: Allow
+ #            Resource: "arn:aws:lambda:*:*:function:*"
+
+
+  GovernanceRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: "Policy for governance role"
+      ManagedPolicyName: Governance_Role_Policy
+      Path: /
+      Roles:
+        - Ref: GovernanceRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - acm:*
+              - apigateway:*
+              - application-autoscaling:*
+              - autoscaling:*
+              - aws-portal:ViewAccount
+              - aws-portal:ViewBilling
+              - aws-portal:ViewPaymentMethods
+              - aws-portal:ViewUsage
+              - ce:*
+              - cloudformation:*
+              - cloudfront:*
+              - cloudtrail:*
+              - cloudwatch:*
+              - cognito:*
+              - cognito-identity:*
+              - cognito-idp:*
+              - cognito-sync:*
+              - config:*
+              - ds:*
+              - dynamodb:*
+              - ec2:*
+              - ecr:*
+              - ecs:*
+              - eks:*
+              - elasticache:*
+              - elasticloadbalancing:*
+              - es:AddTags
+              - es:CreateElasticsearchDomain
+              - es:DeleteTags
+              - es:Describe*
+              - es:ESHttpGet
+              - es:ESHttpHead
+              - es:Get*
+              - es:List*
+              - es:RemoveTags
+              - es:UpdateElasticsearchDomainConfig
+              - events:*
+              - firehose:*
+              - glacier:*
+              - glue:*
+              - guardduty:CreateDetector
+              - guardduty:CreateIPSet
+              - guardduty:CreateMembers
+              - guardduty:CreateSampleFindings
+              - guardduty:CreateThreatIntelSet
+              - guardduty:GetDetector
+              - guardduty:GetFindings
+              - guardduty:GetFindingsStatistics
+              - guardduty:GetInvitationsCount
+              - guardduty:GetIPSet
+              - guardduty:GetMasterAccount
+              - guardduty:GetMembers
+              - guardduty:GetThreatIntelSet
+              - guardduty:ListDetectors
+              - guardduty:ListFindings
+              - guardduty:ListInvitations
+              - guardduty:ListIPSets
+              - guardduty:ListMembers
+              - guardduty:ListThreatIntelSets
+              - health:DescribeAffectedAccountsForOrganization
+              - health:DescribeAffectedEntities
+              - health:DescribeAffectedEntitiesForOrganization
+              - health:DescribeEntityAggregates
+              - health:DescribeEventAggregates
+              - health:DescribeEventDetails
+              - health:DescribeEventDetailsForOrganization
+              - health:DescribeEvents
+              - health:DescribeEventsForOrganization
+              - health:DescribeEventTypes
+              - iam:AddRoleToInstanceProfile
+              - iam:AddUserToGroup
+              - iam:AttachGroupPolicy
+              - iam:AttachRolePolicy
+              - iam:AttachUserPolicy
+              - iam:ChangePassword
+              - iam:CreateAccessKey
+              - iam:CreateGroup
+              - iam:CreateInstanceProfile
+              - iam:CreateLoginProfile
+              - iam:CreateOpenIDConnectProvider
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:CreateRole
+              - iam:CreateServiceLinkedRole
+              - iam:CreateUser
+              - iam:CreateVirtualMFADevice
+              - iam:DeactivateMFADevice
+              - iam:DeleteAccessKey
+              - iam:DeleteInstanceProfile
+              - iam:DeleteLoginProfile
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:DeleteRole
+              - iam:DeleteRolePolicy
+              - iam:DeleteSigningCertificate
+              - iam:DeleteSSHPublicKey
+              - iam:DeleteUser
+              - iam:DeleteVirtualMFADevice
+              - iam:DetachRolePolicy
+              - iam:DetachUserPolicy
+              - iam:EnableMFADevice
+              - iam:GenerateCredentialReport
+              - iam:GenerateServiceLastAccessedDetails
+              - iam:GetAccessKeyLastUsed
+              - iam:GetAccountAuthorizationDetails
+              - iam:GetAccountPasswordPolicy
+              - iam:GetAccountSummary
+              - iam:GetContextKeysForCustomPolicy
+              - iam:GetContextKeysForPrincipalPolicy
+              - iam:GetCredentialReport
+              - iam:GetGroup
+              - iam:GetGroupPolicy
+              - iam:GetInstanceProfile
+              - iam:GetLoginProfile
+              - iam:GetOpenIDConnectProvider
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:GetSAMLProvider
+              - iam:GetServerCertificate
+              - iam:GetServiceLastAccessedDetails
+              - iam:GetServiceLastAccessedDetailsWithEntities
+              - iam:GetServiceLinkedRoleDeletionStatus
+              - iam:GetSSHPublicKey
+              - iam:GetUser
+              - iam:GetUserPolicy
+              - iam:ListAccessKeys
+              - iam:ListAccountAliases
+              - iam:ListAttachedGroupPolicies
+              - iam:ListAttachedRolePolicies
+              - iam:ListAttachedUserPolicies
+              - iam:ListEntitiesForPolicy
+              - iam:ListGroupPolicies
+              - iam:ListGroups
+              - iam:ListGroupsForUser
+              - iam:ListInstanceProfiles
+              - iam:ListInstanceProfilesForRole
+              - iam:ListMFADevices
+              - iam:ListOpenIDConnectProviders
+              - iam:ListPolicies
+              - iam:ListPoliciesGrantingServiceAccess
+              - iam:ListPolicyVersions
+              - iam:ListRolePolicies
+              - iam:ListRoles
+              - iam:ListRoleTags
+              - iam:ListSAMLProviders
+              - iam:ListServerCertificates
+              - iam:ListServiceSpecificCredentials
+              - iam:ListSigningCertificates
+              - iam:ListSSHPublicKeys
+              - iam:ListUserPolicies
+              - iam:ListUsers
+              - iam:ListVirtualMFADevices
+              - iam:PassRole
+              - iam:PutRolePolicy
+              - iam:RemoveRoleFromInstanceProfile
+              - iam:RemoveUserFromGroup
+              - iam:ResyncMFADevice
+              - iam:SimulateCustomPolicy
+              - iam:SimulatePrincipalPolicy
+              - iam:TagRole
+              - iam:UpdateAccessKey
+              - iam:UpdateAssumeRolePolicy
+              - iam:UpdateLoginProfile
+              - iam:UpdateSigningCertificate
+              - iam:UpdateSSHPublicKey
+              - iam:UploadSigningCertificate
+              - iam:UploadSSHPublicKey
+              - inspector:*
+              - kinesis:AddTagsToStream
+              - kinesis:CreateStream
+              - kinesis:Describe*
+              - kinesis:Get*
+              - kinesis:List*
+              - kinesis:PutRecord
+              - kms:CancelKeyDeletion
+              - kms:CreateAlias
+              - kms:CreateKey
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:EnableKey
+              - kms:EnableKeyRotation
+              - kms:Encrypt
+              - kms:GenerateDataKey
+              - kms:GenerateDataKeyWithoutPlaintext
+              - kms:GenerateRandom
+              - kms:GetKeyPolicy
+              - kms:GetKeyRotationStatus
+              - kms:GetParametersForImport
+              - kms:ImportKeyMaterial
+              - kms:ListAliases
+              - kms:ListGrants
+              - kms:ListKeyPolicies
+              - kms:ListKeys
+              - kms:ListResourceTags
+              - kms:ListRetirableGrants
+              - kms:ReEncryptFrom
+              - kms:ReEncryptTo
+              - kms:TagResource
+              - lambda:*
+              - logs:*
+              - rds:*
+              - route53:*
+              - route53domains:*
+              - s3:*
+              - ses:*
+              - sns:*
+              - sqs:*
+              - ssm:*
+              - sts:GetSessionToken
+              - support:*
+              - tag:*
+              - trustedadvisor:Describe*
+              - waf:*
+              - waf-regional:*
+            Effect: Allow
+            Resource: "*"
+          - Action: 
+              - "iam:AddRoleToInstanceProfile"
+              - "iam:RemoveRoleFromInstanceProfile"
+              - "iam:DeleteRole"
+              - "iam:DeleteRolePolicy"
+              - "iam:DetachRolePolicy"
+              - "iam:AttachRolePolicy"
+              - "iam:UpdateRole"
+              - "iam:PutRolePolicy"
+              - "iam:UpdateAssumeRolePolicy"
+            Effect: Deny
+            Resource: 
+              - !GetAtt [GovernanceRole, Arn]
+          - Action: 
+              - "iam:CreatePolicy"
+              - "iam:DeletePolicy"
+              - "iam:CreatePolicyVersion"
+              - "iam:DeletePolicyVersion"
+              - "iam:SetDefaultPolicyVersion"
+            Effect: Deny
+            Resource:
+              -  arn:aws:iam::aws:policy/Governance_Role_Policy*
+          - Action: '*'
+            Effect: Deny
+            Resource:
+              - arn:aws:iam::aws:policy/AdministratorAccess
+          - Action: 
+              - cloudfront:DeleteDistribution
+              - cloudtrail:DeleteTrail
+              - cloudtrail:StopLogging
+              - cloudtrail:UpdateTrail
+              - iam:DetachGroupPolicy
+              - logs:DeleteLogGroup
+              - logs:DeleteLogStream
+              - logs:UntagLogGroup
+              - route53:CreateHostedZone
+              - route53:DeleteHostedZone
+            Effect: Deny
+            Resource: '*'
+           
+
+  DeveloperRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: "Allows the execution of Lambda Functions."
+      ManagedPolicyName: LambdaInvocationAccess
+      Path: /
+      Roles:
+        - Ref: DeveloperRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - "lambda:InvokeFunction"
+            Effect: Allow
+            Resource: "arn:aws:lambda:*:*:function:*" 
+
+  DevOpsRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: "Policy for the DevOps Group Role."
+      ManagedPolicyName: Devops_Group_Policy_Hardening
+      Path: /
+      Roles:
+        - Ref: DevOpsRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: 
+              - acm:*
+              - apigateway:*
+              - application-autoscaling:*
+              - autoscaling:*
+              - aws-portal:ViewAccount
+              - aws-portal:ViewBilling
+              - aws-portal:ViewPaymentMethods
+              - aws-portal:ViewUsage
+              - ce:*
+              - cloudformation:*
+              - cloudfront:*
+              - cloudtrail:*
+              - cloudwatch:*
+              - cognito-identity:*
+              - cognito-idp:*
+              - cognito-sync:*
+              - config:*
+              - ds:*
+              - dynamodb:*
+              - ec2:*
+              - ecr:*
+              - ecs:*
+              - eks:*
+              - elasticache:*
+              - elasticloadbalancing:*
+              - es:AddTags
+              - es:CreateElasticsearchDomain
+              - es:DeleteTags
+              - es:Describe*
+              - es:ESHttpGet
+              - es:ESHttpHead
+              - es:Get*
+              - es:List*
+              - es:RemoveTags
+              - es:UpdateElasticsearchDomainConfig
+              - events:*
+              - firehose:*
+              - glacier:*
+              - glue:*
+              - guardduty:CreateDetector
+              - guardduty:CreateIPSet
+              - guardduty:CreateMembers
+              - guardduty:CreateSampleFindings
+              - guardduty:CreateThreatIntelSet
+              - guardduty:GetDetector
+              - guardduty:GetFindings
+              - guardduty:GetFindingsStatistics
+              - guardduty:GetInvitationsCount
+              - guardduty:GetIPSet
+              - guardduty:GetMasterAccount
+              - guardduty:GetMembers
+              - guardduty:GetThreatIntelSet
+              - guardduty:ListDetectors
+              - guardduty:ListFindings
+              - guardduty:ListInvitations
+              - guardduty:ListIPSets
+              - guardduty:ListMembers
+              - guardduty:ListThreatIntelSets
+              - health:DescribeAffectedAccountsForOrganization
+              - health:DescribeAffectedEntities
+              - health:DescribeAffectedEntitiesForOrganization
+              - health:DescribeEntityAggregates
+              - health:DescribeEventAggregates
+              - health:DescribeEventDetails
+              - health:DescribeEventDetailsForOrganization
+              - health:DescribeEvents
+              - health:DescribeEventsForOrganization
+              - health:DescribeEventTypes
+              - iam:AddRoleToInstanceProfile
+              - iam:AddUserToGroup
+              - iam:AttachGroupPolicy
+              - iam:AttachRolePolicy
+              - iam:AttachUserPolicy
+              - iam:ChangePassword
+              - iam:CreateGroup
+              - iam:CreateInstanceProfile
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:CreateRole
+              - iam:CreateUser
+              - iam:CreateVirtualMFADevice
+              - iam:DeleteInstanceProfile
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:DeleteRole
+              - iam:DeleteRolePolicy
+              - iam:DetachRolePolicy
+              - iam:EnableMFADevice
+              - iam:GenerateCredentialReport
+              - iam:GenerateServiceLastAccessedDetails
+              - iam:GetAccessKeyLastUsed
+              - iam:GetAccountAuthorizationDetails
+              - iam:GetAccountPasswordPolicy
+              - iam:GetAccountSummary
+              - iam:GetContextKeysForCustomPolicy
+              - iam:GetContextKeysForPrincipalPolicy
+              - iam:GetCredentialReport
+              - iam:GetGroup
+              - iam:GetGroupPolicy
+              - iam:GetInstanceProfile
+              - iam:GetLoginProfile
+              - iam:GetOpenIDConnectProvider
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:GetSAMLProvider
+              - iam:GetServerCertificate
+              - iam:GetServiceLastAccessedDetails
+              - iam:GetServiceLastAccessedDetailsWithEntities
+              - iam:GetServiceLinkedRoleDeletionStatus
+              - iam:GetSSHPublicKey
+              - iam:GetUser
+              - iam:GetUserPolicy
+              - iam:ListAccessKeys
+              - iam:ListAccountAliases
+              - iam:ListAttachedGroupPolicies
+              - iam:ListAttachedRolePolicies
+              - iam:ListAttachedUserPolicies
+              - iam:ListEntitiesForPolicy
+              - iam:ListGroupPolicies
+              - iam:ListGroups
+              - iam:ListGroupsForUser
+              - iam:ListInstanceProfiles
+              - iam:ListInstanceProfilesForRole
+              - iam:ListMFADevices
+              - iam:ListOpenIDConnectProviders
+              - iam:ListPolicies
+              - iam:ListPoliciesGrantingServiceAccess
+              - iam:ListPolicyVersions
+              - iam:ListRolePolicies
+              - iam:ListRoles
+              - iam:ListRoleTags
+              - iam:ListSAMLProviders
+              - iam:ListServerCertificates
+              - iam:ListServiceSpecificCredentials
+              - iam:ListSigningCertificates
+              - iam:ListSSHPublicKeys
+              - iam:ListUserPolicies
+              - iam:ListUsers
+              - iam:ListVirtualMFADevices
+              - iam:PassRole
+              - iam:PutRolePolicy
+              - iam:RemoveRoleFromInstanceProfile
+              - iam:RemoveUserFromGroup
+              - iam:ResyncMFADevice
+              - iam:SimulateCustomPolicy
+              - iam:SimulatePrincipalPolicy
+              - iam:TagRole
+              - iam:UpdateAssumeRolePolicy
+              - iam:UpdateLoginProfile
+              - kinesis:AddTagsToStream
+              - kinesis:CreateStream
+              - kinesis:Describe*
+              - kinesis:Get*
+              - kms:CancelKeyDeletion
+              - kms:CreateAlias
+              - kms:CreateKey
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:EnableKey
+              - kms:EnableKeyRotation
+              - kms:Encrypt
+              - kms:GenerateDataKey
+              - kms:GenerateDataKeyWithoutPlaintext
+              - kms:GenerateRandom
+              - kms:GetKeyPolicy
+              - kms:GetKeyRotationStatus
+              - kms:GetParametersForImport
+              - kms:ImportKeyMaterial
+              - kms:ListAliases
+              - kms:ListGrants
+              - kms:ListKeyPolicies
+              - kms:ListKeys
+              - kms:ListResourceTags
+              - kms:ListRetirableGrants
+              - kms:ReEncryptFrom
+              - kms:ReEncryptTo
+              - kms:TagResource
+              - lambda:*
+              - logs:*
+              - rds:*
+              - route53:*
+              - route53domains:*
+              - s3:*
+              - ses:*
+              - sns:*
+              - sqs:*
+              - ssm:*
+              - support:*
+              - tag:*
+              - trustedadvisor:Describe*
+              - waf:*
+              - waf-regional:*
+            Effect: Allow
+            Resource: '*'
+         
+
+  DevopsRoleDenyPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: "Policy to deny actions for devops role"
+      ManagedPolicyName: "Devopc_group_deny_policy"
+      Path: /
+      Roles:
+        - Ref: DevOpsRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement: 
+          - Action: 
+              - "iam:AddRoleToInstanceProfile"
+              - "iam:RemoveRoleFromInstanceProfile"
+              - "iam:DeleteRole"
+              - "iam:DeleteRolePolicy"
+              - "iam:DetachRolePolicy"
+              - "iam:AttachRolePolicy"
+              - "iam:UpdateRole"
+              - "iam:PutRolePolicy"
+              - "iam:UpdateAssumeRolePolicy"
+            Effect: Deny
+            Resource: 
+            - !GetAtt [DevOpsRole, Arn]
+          - Action: 
+              - "iam:CreatePolicy"
+              - "iam:DeletePolicy"
+              - "iam:CreatePolicyVersion"
+              - "iam:DeletePolicyVersion"
+              - "iam:SetDefaultPolicyVersion"
+            Effect: Deny
+            Resource:
+              -  arn:aws:iam::aws:policy/DevOpsRole*
+          - Action: '*'
+            Effect: Deny
+            Resource:
+              - arn:aws:iam::aws:policy/AdministratorAccess
+          - Action: 
+              - 'aws-portal:*'
+              - 'budgets:*'
+            Effect: Deny
+            Resource: '*'
+          - Action:
+              - awsbillingconsole:*Billing
+              - awsbillingconsole:*PaymentMethods
+              - awsbillingconsole:*Usage
+              - cloudfront:DeleteDistribution
+              - cloudtrail:DeleteTrail
+              - cloudtrail:StopLogging
+              - cloudtrail:UpdateTrail
+              - ec2:DeleteCustomerGateway
+              - ec2:DeleteDhcpOptions
+              - ec2:DeleteEgressOnlyInternetGateway
+              - ec2:DeleteFlowLogs
+              - ec2:DeleteInternetGateway
+              - ec2:DeleteKeyPair
+              - ec2:DeleteNatGateway
+              - ec2:DeleteNetworkAcl
+              - ec2:DeleteNetworkAclEntry
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteNetworkInterfacePermission
+              - ec2:DeleteRoute
+              - ec2:DeleteRouteTable
+              - ec2:DeleteSpotDatafeedSubscription
+              - ec2:DeleteSubnet
+              - ec2:DeleteVpc
+              - ec2:DeleteVpcEndpointConnectionNotifications
+              - ec2:DeleteVpcEndpoints
+              - ec2:DeleteVpcEndpointServiceConfigurations
+              - ec2:DeleteVpcPeeringConnection
+              - ec2:DeleteVpnConnection
+              - ec2:DeleteVpnConnectionRoute
+              - ec2:DeleteVpnGateway
+              - ec2:DetachClassicLinkVpc
+              - ec2:DetachInternetGateway
+              - ec2:DetachNetworkInterface
+              - ec2:DetachVpnGateway
+              - ec2:DisableVgwRoutePropagation
+              - ec2:DisableVpcClassicLink
+              - ec2:DisableVpcClassicLinkDnsSupport
+              - ec2:DisassociateAddress
+              - ec2:DisassociateRouteTable
+              - ec2:DisassociateSubnetCidrBlock
+              - ec2:DisassociateVpcCidrBlock
+              - ec2:ModifyVpcAttribute
+              - ec2:ModifyVpcEndpoint
+              - ec2:ModifyVpcEndpointConnectionNotification
+              - ec2:ModifyVpcEndpointServiceConfiguration
+              - ec2:ModifyVpcEndpointServicePermissions
+              - ec2:ModifyVpcPeeringConnectionOptions
+              - ec2:ModifyVpcTenancy
+              - ec2:RejectVpcEndpointConnections
+              - ec2:RejectVpcPeeringConnection
+              - ec2:ReplaceNetworkAclAssociation
+              - ec2:ReplaceNetworkAclEntry
+              - ec2:ReplaceRoute
+              - iam:AttachGroupPolicy
+              - iam:AttachRolePolicy
+              - iam:AttachUserPolicy
+              - iam:CreateAccessKey
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:DetachGroupPolicy
+              - logs:DeleteLogGroup
+              - logs:DeleteLogStream
+              - logs:UntagLogGroup
+              - route53:CreateHostedZone
+              - route53:DeleteHostedZone
+            Effect: Deny
+            Resource: '*'
+
+
+  # # Admin:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: Admin
+  #     Path: "/admin/federatedroles/"
+  #     ManagedPolicyArns:
+  #       - 'arn:aws:iam::aws:policy/AdministratorAccess'
+  #       - 'arn:aws:iam::aws:policy/AWSSupportAccess'
+  #       - !Ref AdminCustomPolicy
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Condition:
+  #             StringEquals:
+  #               "SAML:aud": "https://signin.aws.amazon.com/saml"
+  #           Principal:
+  #             Federated:
+  #               - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+  #           Action:
+  #             - sts:AssumeRoleWithSAML
+
+  AutomationAdmin:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AutomationAdmin
+      Path: "/admin/federatedroles/"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/ReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+        - 'arn:aws:iam::aws:policy/AWSSupportAccess'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+
+  QaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+      RoleName: adfs-qa
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+      Path: /
+     
+  # # FinanceRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Condition:
+  #             StringEquals:
+  #               "SAML:aud": "https://signin.aws.amazon.com/saml"
+  #           Principal:
+  #             Federated:
+  #               - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+  #           Action:
+  #             - sts:AssumeRoleWithSAML
+  #     RoleName: adfs-finance
+  #     ManagedPolicyArns:
+  #       - !Sub "arn:aws:iam::${AWS::AccountId}:policy/MFA_Force"
+  #     Path: /
+      
+      
+  # # FinanceRolePolicy:
+  #   Type: AWS::IAM::ManagedPolicy
+  #   Properties:
+  #     Description: "Allows read only access to billing module."
+  #     ManagedPolicyName: BillingReadOnlyAccess
+  #     Path: /
+  #     Roles:
+  #       - Ref: FinanceRole
+  #     PolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Action:
+  #             - "aws-portal:ViewPaymentMethod"
+  #             - "aws-portal:ViewAccount"
+  #             - "aws-portal:ViewBilling"
+  #             - "aws-portal:ViewUsage"
+  #           Effect: Allow
+  #           Resource: "*"
+  
+  ViewOnlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+      RoleName: adfs-viewonly
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      Path: /
+      
+  SecurityAuditorsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+      RoleName: adfs-securityauditors
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/SecurityAudit
+      Path: /
+
+  # # DocumentationRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Condition:
+  #             StringEquals:
+  #               "SAML:aud": "https://signin.aws.amazon.com/saml"
+  #           Principal:
+  #             Federated:
+  #               - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+  #           Action:
+  #             - sts:AssumeRoleWithSAML
+  #     RoleName: adfs-documentation
+  #     ManagedPolicyArns:
+  #       - !Sub "arn:aws:iam::${AWS::AccountId}:policy/MFA_Force"
+  #     Path: /
+
+  # # DocumentationRolePolicy:
+  #   Type: AWS::IAM::ManagedPolicy
+  #   Properties:
+  #     Description: "Allows read and write access to Documentation S3 Bucket"
+  #     ManagedPolicyName: S3_Bucket_List_Policy
+  #     Path: /
+  #     Roles:
+  #       - Ref: DocumentationRole
+  #     PolicyDocument:
+  #       Version: '2012-10-17'
+  #       Statement:
+  #       - Sid: showDocumentBucket
+  #         Effect: Allow
+  #         Action:
+  #         - s3:ListBucket
+  #         - s3:GetBucketLocation
+  #         Resource: !Sub 'arn:aws:s3:::${DocumentationBucketName}'
+  #       - Sid: AllowDocumentBucketAction
+  #         Effect: Allow
+  #         Action:
+  #           - s3:PutObject
+  #           - s3:GetObject
+  #           - s3:DeleteObject
+  #         Resource:
+  #           - !Sub 'arn:aws:s3:::${DocumentationBucketName}'
+  #           - !Sub 'arn:aws:s3:::${DocumentationBucketName}/*'
+  #       - Sid: ShowallBuckets
+  #         Effect: Allow
+  #         Action: s3:ListAllMyBuckets
+  #         Resource: "*"
+        
+            
+  # DivvyCloudReadOnly:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: DivvyCloud_ReadOnly
+  #     Path: /automation/cxloyalty/
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Condition:
+  #             StringEquals:
+  #               "SAML:aud": "https://signin.aws.amazon.com/saml"
+  #           Principal:
+  #             Federated:
+  #               - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+  #           Action:
+  #             - "sts:AssumeRoleWithSAML"
+
+  # DivvyCloudPower:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: DivvyCloud_PowerRole
+  #     Path: /automation/cxloyalty/
+  #     ManagedPolicyArns:
+  #       - 'arn:aws:iam::aws:policy/AdministratorAccess'
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Condition:
+  #             StringEquals:
+  #               "SAML:aud": "https://signin.aws.amazon.com/saml"
+  #           Principal:
+  #             Federated:
+  #               - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+  #           Action:
+  #             - sts:AssumeRoleWithSAML
+  CaseBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+  ResponderPolicy:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      Description: "All Permissions aws_ir needs to interact with ec2 and IAM roles."
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Action:
+              - "s3:*"
+            Resource:
+              Fn::Join: ['', ['arn:aws:s3:::', {Ref: CaseBucket}, '/*' ]]
+          -
+            Effect: "Allow"
+            Action:
+              - "cloudtrail:DescribeTrails"
+              - "cloudtrail:GetTrailStatus"
+              - "cloudtrail:ListTags"
+              - "cloudtrail:LookupEvents"
+              - "cloudtrail:StartLogging"
+              - "cloudtrail:UpdateTrail"
+              - "ec2:DescribeRegions"
+              - "ec2:DescribeAvailabilityZones"
+              - "ec2:DescribeInstances"
+              - "ec2:AttachVolume"
+              - "ec2:AuthorizeSecurityGroupEgress"
+              - "ec2:AuthorizeSecurityGroupIngress"
+              - "ec2:CopyImage"
+              - "ec2:CopySnapshot"
+              - "ec2:CreateFlowLogs"
+              - "ec2:CreateImage"
+              - "ec2:CreateKeyPair"
+              - "ec2:CreateNetworkAcl"
+              - "ec2:CreateNetworkAclEntry"
+              - "ec2:CreateSecurityGroup"
+              - "ec2:CreateSnapshot"
+              - "ec2:CreateSubnet"
+              - "ec2:CreateTags"
+              - "ec2:DetachNetworkInterface"
+              - "ec2:DetachVolume"
+              - "ec2:GetConsoleOutput"
+              - "ec2:GetConsoleScreenshot"
+              - "ec2:ImportImage"
+              - "ec2:ImportInstance"
+              - "ec2:ImportKeyPair"
+              - "ec2:ImportSnapshot"
+              - "ec2:ImportVolume"
+              - "ec2:ModifyInstanceAttribute"
+              - "ec2:ModifySnapshotAttribute"
+              - "ec2:ModifySubnetAttribute"
+              - "ec2:ModifyVolumeAttribute"
+              - "ec2:RebootInstances"
+              - "ec2:ReportInstanceStatus"
+              - "ec2:ResetSnapshotAttribute"
+              - "ec2:RestoreAddressToClassic"
+              - "ec2:RevokeSecurityGroupEgress"
+              - "ec2:RevokeSecurityGroupIngress"
+              - "ec2:StopInstances"
+              - "iam:AddRoleToInstanceProfile"
+              - "iam:AttachRolePolicy"
+              - "iam:AttachUserPolicy"
+              - "iam:DetachRolePolicy"
+              - "iam:DetachUserPolicy"
+              - "iam:CreatePolicy"
+              - "iam:GetAccessKeyLastUsed"
+              - "iam:PutRolePolicy"
+              - "iam:PutUserPolicy"
+              - "iam:UpdateAccessKey"
+              - "iam:UpdateUser"
+            Resource: "*"
+      ManagedPolicyName: "ResponderPermissions"
+  ResponderRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: /automation/cxloyalty/
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              AWS:
+                - !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - "sts:AssumeRole"
+            Condition:
+              StringEquals:
+                aws:PrincipalType: User
+              Bool:
+                aws:MultiFactorAuthPresent: 'true'
+      ManagedPolicyArns:
+        - !Ref 'ResponderPolicy'
+      RoleName: "ResponderRole"
+
+  ResponderCanAssumeRole:
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      Description: Allow incident responders to assume role.
+      Path: /
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: Allow
+            Action: sts:AssumeRole
+            Resource:
+              - !GetAtt [ResponderRole, Arn]
+      Groups:
+        - "IncidentResponders"
+      ManagedPolicyName: "ResponderCanAssume"
+
+  NetAdmin:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: NetAdmin
+      Path: "/admin/federatedroles/"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/job-function/NetworkAdministrator'
+        - 'arn:aws:iam::aws:policy/AWSSupportAccess'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+
+  ReadOnly:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ReadOnly
+      Path: "/admin/federatedroles/"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/ReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AWSSupportAccess'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                "SAML:aud": "https://signin.aws.amazon.com/saml"
+            Principal:
+              Federated:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:saml-provider/${SAMLProviderName}"
+            Action:
+              - sts:AssumeRoleWithSAML
+
+  # AdminCustomPolicy:
+  #   Type: AWS::IAM::ManagedPolicy
+  #   Properties:
+  #     ManagedPolicyName: AdminCustomPolicy
+  #     Path: "/admin/federatedroles/"      
+  #     PolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #           -
+  #               Effect: Allow
+  #               Resource: '*'
+  #               Action:
+  #                   - 'aws-portal:*'
+  #           -
+  #               Effect: Deny
+  #               Resource: '*'
+  #               Action:
+  #                   - 'cloudtrail:DeleteTrail'
+  #                   - 'cloudtrail:StopLogging'
+
+  AutomationAdminCustomPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: AutomationAdminCustomPolicy
+      Path: "/admin/federatedroles/"
+      Roles:
+        - Ref: AutomationAdmin
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+            -
+                Effect: Allow
+                Resource: '*'
+                Action:
+                    - 'ec2:*'
+            -   Effect: Allow
+                Resource: '*'
+                Action:
+                  - 'support:*'
+            -
+                Effect: Allow 
+                Resource: '*'
+                Action:
+                    - 'elasticloadbalancing:*'
+            -
+                Effect: Allow
+                Resource: '*'
+                Action:
+                    - 'cloudwatch:*'
+            -
+                Effect: Allow
+                Resource: '*'
+                Action:
+                    - 'autoscaling:*'
+            -
+                Effect: Allow
+                Resource: '*'
+                Action:
+                    - 'iam:PassRole'
+                    - 'iam:ListServerCertificates'
+            -
+                Effect: Deny
+                Resource: '*'
+                Action:
+                    - "ec2:AcceptVpcPeeringConnection"
+                    - "ec2:AllocateAddress"
+                    - "ec2:AssignPrivateIpAddresses"
+                    - "ec2:AssociateAddress"
+                    - "ec2:AssociateDhcpOptions"
+                    - "ec2:AssociateRouteTable"
+                    - "ec2:AttachClassicLinkVpc"
+                    - "ec2:AttachInternetGateway"
+                    - "ec2:AttachNetworkInterface"
+                    - "ec2:AttachVpnGateway"
+                    - "ec2:AuthorizeSecurityGroupEgress"
+                    - "ec2:AuthorizeSecurityGroupIngress"
+                    - "ec2:CreateCustomerGateway"
+                    - "ec2:CreateDhcpOptions"
+                    - "ec2:CreateFlowLogs"
+                    - "ec2:CreateInternetGateway"
+                    - "ec2:CreateNatGateway"
+                    - "ec2:CreateNetworkAcl"
+                    - "ec2:CreateNetworkAcl"
+                    - "ec2:CreateNetworkAclEntry"
+                    - "ec2:CreateNetworkInterface"
+                    - "ec2:CreateRoute"
+                    - "ec2:CreateRouteTable"
+                    - "ec2:CreateSecurityGroup"
+                    - "ec2:CreateSubnet"
+                    - "ec2:CreateTags"
+                    - "ec2:CreateVpc"
+                    - "ec2:CreateVpcEndpoint"
+                    - "ec2:CreateVpcPeeringConnection"
+                    - "ec2:CreateVpnConnection"
+                    - "ec2:CreateVpnConnectionRoute"
+                    - "ec2:CreateVpnGateway"
+                    - "ec2:DeleteCustomerGateway"
+                    - "ec2:DeleteDhcpOptions"
+                    - "ec2:DeleteFlowLogs"
+                    - "ec2:DeleteInternetGateway"
+                    - "ec2:DeleteNatGateway"
+                    - "ec2:DeleteNetworkAcl"
+                    - "ec2:DeleteNetworkAclEntry"
+                    - "ec2:DeleteNetworkInterface"
+                    - "ec2:DeleteRoute"
+                    - "ec2:DeleteRouteTable"
+                    - "ec2:DeleteSecurityGroup"
+                    - "ec2:DeleteSubnet"
+                    - "ec2:DeleteTags"
+                    - "ec2:DeleteVpc"
+                    - "ec2:DeleteVpcEndpoints"
+                    - "ec2:DeleteVpcPeeringConnection"
+                    - "ec2:DeleteVpnConnection"
+                    - "ec2:DeleteVpnConnectionRoute"
+                    - "ec2:DeleteVpnGateway"
+                    - "ec2:DetachClassicLinkVpc"
+                    - "ec2:DetachInternetGateway"
+                    - "ec2:DetachNetworkInterface"
+                    - "ec2:DetachVpnGateway"
+                    - "ec2:DisableVgwRoutePropagation"
+                    - "ec2:DisableVpcClassicLink"
+                    - "ec2:DisassociateAddress"
+                    - "ec2:DisassociateRouteTable"
+                    - "ec2:EnableVgwRoutePropagation"
+                    - "ec2:EnableVpcClassicLink"
+                    - "ec2:ModifyNetworkInterfaceAttribute"
+                    - "ec2:ModifySubnetAttribute"
+                    - "ec2:ModifyVpcAttribute"
+                    - "ec2:ModifyVpcEndpoint"
+                    - "ec2:MoveAddressToVpc"
+                    - "ec2:RejectVpcPeeringConnection"
+                    - "ec2:ReleaseAddress"
+                    - "ec2:ReplaceNetworkAclAssociation"
+                    - "ec2:ReplaceNetworkAclEntry"
+                    - "ec2:ReplaceRoute"
+                    - "ec2:ReplaceRouteTableAssociation"
+                    - "ec2:ResetNetworkInterfaceAttribute"
+                    - "ec2:RestoreAddressToClassic"
+                    - "ec2:RevokeSecurityGroupEgress"
+                    - "ec2:RevokeSecurityGroupIngress"
+                    - "ec2:UnassignPrivateIpAddresses"
+
+  # DivvyCloudReadOnlyCustomPolicyA:
+  #   Type: AWS::IAM::ManagedPolicy
+  #   Properties:
+  #     ManagedPolicyName: DivvyCloudReadOnlyCustomPolicyA
+  #     Path: "/admin/federatedroles/"
+  #     Roles:
+  #       - Ref: DivvyCloudReadOnly
+  #     PolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #           -
+  #               Effect: Allow
+  #               Resource: '*'
+  #               Action:
+  #                 - "acm:DescribeCertificate"
+  #                 - "acm:ListCertificates"
+  #                 - "acm:ListTagsForCertificate"
+  #                 - "apigateway:GET"
+  #                 - "apigateway:GetApiKeys"
+  #                 - "apigateway:GetAuthorizers"
+  #                 - "apigateway:GetRestApiKeys"
+  #                 - "apigateway:GetRestApis"
+  #                 - "apigateway:GetRestStages"
+  #                 - "autoscaling:DescribeAutoScalingGroups"
+  #                 - "autoscaling:DescribeLaunchConfigurations"
+  #                 - "autoscaling:DescribeTags"
+  #                 - "cloudformation:DescribeStackResource"
+  #                 - "cloudformation:DescribeStackResources"
+  #                 - "cloudformation:DescribeStacks"
+  #                 - "cloudformation:GetTemplate"
+  #                 - "cloudformation:ListStackResources"
+  #                 - "cloudformation:ListStacks"
+  #                 - "cloudfront:GetDistribution"
+  #                 - "cloudfront:GetStreamingDistribution"
+  #                 - "cloudfront:ListDistributions"
+  #                 - "cloudfront:ListStreamingDistributions"
+  #                 - "cloudfront:ListTagsForResource"
+  #                 - "cloudsearch:DescribeAvailabilityOptions"
+  #                 - "cloudsearch:DescribeDomains"
+  #                 - "cloudsearch:DescribeServiceAccessPolicies"
+  #                 - "cloudsearch:ListDomainNames"
+  #                 - "cloudtrail:DescribeTrails"
+  #                 - "cloudtrail:GetEventSelectors"
+  #                 - "cloudtrail:GetTrailStatus"
+  #                 - "cloudwatch:DescribeAlarms"
+  #                 - "cloudwatch:GetMetricStatistics"
+  #                 - "cloudwatch:ListMetrics"
+  #                 - "config:DescribeConfigurationRecorderStatus"
+  #                 - "config:DescribeConfigurationRecorders"
+  #                 - "config:DescribeDeliveryChannelStatus"
+  #                 - "config:DescribeDeliveryChannels"
+  #                 - "dax:DescribeClusters"
+  #                 - "dax:DescribeTable"
+  #                 - "dax:ListTags"
+  #                 - "dax:ListTables"
+  #                 - "directconnect:DescribeConnections"
+  #                 - "dynamodb:DescribeContinuousBackups"
+  #                 - "dynamodb:DescribeGlobalTable"
+  #                 - "dynamodb:DescribeTable"
+  #                 - "dynamodb:ListBackups"
+  #                 - "dynamodb:ListGlobalTables"
+  #                 - "dynamodb:ListTables"
+  #                 - "dynamodb:ListTagsOfResource"
+  #                 - "ec2:DescribeAccountAttributes"
+  #                 - "ec2:DescribeAddresses"
+  #                 - "ec2:DescribeAvailabilityZones"
+  #                 - "ec2:DescribeFlowLogs"
+  #                 - "ec2:DescribeHosts"
+  #                 - "ec2:DescribeImageAttribute"
+  #                 - "ec2:DescribeImages"
+  #                 - "ec2:DescribeImportImageTasks"
+  #                 - "ec2:DescribeInstanceAttribute"
+  #                 - "ec2:DescribeInstanceStatus"
+  #                 - "ec2:DescribeInstances"
+  #                 - "ec2:DescribeInternetGateways"
+  #                 - "ec2:DescribeKeyPairs"
+  #                 - "ec2:DescribeNatGateways"
+  #                 - "ec2:DescribeNetworkAcls"
+  #                 - "ec2:DescribeNetworkInterfaceAttribute"
+  #                 - "ec2:DescribeNetworkInterfaces"
+  #                 - "ec2:DescribePlacementGroups"
+  #                 - "ec2:DescribeRegions"
+  #                 - "ec2:DescribeReservedInstances"
+  #                 - "ec2:DescribeRouteTables"
+  #                 - "ec2:DescribeSecurityGroups"
+  #                 - "ec2:DescribeSnapshots"
+  #                 - "ec2:DescribeSubnets"
+  #                 - "ec2:DescribeTags"
+  #                 - "ec2:DescribeTransitGatewayAttachments"
+  #                 - "ec2:DescribeTransitGateways"
+  #                 - "ec2:DescribeVolumeStatus"
+  #                 - "ec2:DescribeVolumes"
+  #                 - "ec2:DescribeVpcAttribute"
+  #                 - "ec2:DescribeVpcEndpoints"
+  #                 - "ec2:DescribeVpcPeeringConnections"
+  #                 - "ec2:DescribeVpcs"
+  #                 - "ec2:GetConsoleOutput"
+  #                 - "ec2:GetEbsDefaultKmsKeyId"
+  #                 - "ec2:GetEbsEncryptionByDefault"
+  #                 - "ecr:DescribeImages"
+  #                 - "ecr:DescribeRepositories"
+  #                 - "ecr:GetRepositoryPolicy"
+  #                 - "ecr:ListTagsForResource"
+  #                 - "ecs:DescribeClusters"
+  #                 - "ecs:DescribeContainerInstances"
+  #                 - "ecs:DescribeTaskDefinition"
+  #                 - "ecs:DescribeTasks"
+  #                 - "ecs:ListClusters"
+  #                 - "ecs:ListContainerInstances"
+  #                 - "ecs:ListTaskDefinitions"
+  #                 - "ecs:ListTasks"
+  #                 - "eks:DescribeCluster"
+  #                 - "eks:ListClusters"
+
+  # DivvyCloudReadOnlyCustomPolicyB:
+  #   Type: AWS::IAM::ManagedPolicy
+  #   Properties:
+  #     ManagedPolicyName: DivvyCloudReadOnlyCustomPolicyB
+  #     Path: "/admin/federatedroles/"
+  #     Roles:
+  #       - Ref: DivvyCloudReadOnly
+  #     PolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #           -
+  #               Effect: Allow
+  #               Resource: '*'
+  #               Action:
+  #                 - "elasticache:DescribeCacheClusters"
+  #                 - "elasticache:DescribeCacheSubnetGroups"
+  #                 - "elasticache:DescribeReplicationGroups"
+  #                 - "elasticache:DescribeSnapshots"
+  #                 - "elasticache:ListTagsForResource"
+  #                 - "elasticbeanstalk:DescribeApplications"
+  #                 - "elasticbeanstalk:DescribeConfigurationSettings"
+  #                 - "elasticbeanstalk:DescribeEnvironments"
+  #                 - "elasticbeanstalk:DescribeEnvironmentResources"
+  #                 - "elasticbeanstalk:DescribePlatformVersion"
+  #                 - "elasticfilesystem:DescribeFileSystems"
+  #                 - "elasticfilesystem:DescribeMountTargetSecurityGroups"
+  #                 - "elasticfilesystem:DescribeMountTargets"
+  #                 - "elasticfilesystem:DescribeTags"
+  #                 - "elasticloadbalancing:DescribeInstanceHealth"
+  #                 - "elasticloadbalancing:DescribeListeners"
+  #                 - "elasticloadbalancing:DescribeLoadBalancerAttributes"
+  #                 - "elasticloadbalancing:DescribeLoadBalancerPolicies"
+  #                 - "elasticloadbalancing:DescribeLoadBalancerPolicyTypes"
+  #                 - "elasticloadbalancing:DescribeLoadBalancers"
+  #                 - "elasticloadbalancing:DescribeRules"
+  #                 - "elasticloadbalancing:DescribeTags"
+  #                 - "elasticloadbalancing:DescribeTargetGroups"
+  #                 - "elasticloadbalancing:DescribeTargetHealth"
+  #                 - "elasticmapreduce:DescribeCluster"
+  #                 - "elasticmapreduce:ListClusters"
+  #                 - "elasticmapreduce:ListInstances"
+  #                 - "es:DescribeElasticsearchDomains"
+  #                 - "es:ListDomainNames"
+  #                 - "es:ListTags"
+  #                 - "events:DescribeEventBus"
+  #                 - "events:ListRules"
+  #                 - "events:ListTargetsByRule"
+  #                 - "firehose:DescribeDeliveryStream"
+  #                 - "firehose:ListDeliveryStreams"
+  #                 - "firehose:ListTagsForDeliveryStream"
+  #                 - "fsx:DescribeFileSystems"
+  #                 - "glacier:DescribeVault"
+  #                 - "glacier:GetVaultAccessPolicy"
+  #                 - "glacier:GetVaultLock"
+  #                 - "glacier:ListTagsForVault"
+  #                 - "glacier:ListVaults"
+  #                 - "guardduty:GetDetector"
+  #                 - "guardduty:GetFindings"
+  #                 - "guardduty:GetMasterAccount"
+  #                 - "guardduty:ListDetectors"
+  #                 - "guardduty:ListFindings"
+  #                 - "guardduty:ListMembers"
+  #                 - "iam:GenerateCredentialReport"
+  #                 - "iam:GetAccessKeyLastUsed"
+  #                 - "iam:GetAccountAuthorizationDetails"
+  #                 - "iam:GetAccountPasswordPolicy"
+  #                 - "iam:GetAccountSummary"
+  #                 - "iam:GetCredentialReport"
+  #                 - "iam:GetLoginProfile"
+  #                 - "iam:GetPolicyVersion"
+  #                 - "iam:GetRole"
+  #                 - "iam:GetRolePolicy"
+  #                 - "iam:GetSAMLProvider"
+  #                 - "iam:GetServerCertificate"
+  #                 - "iam:GetUser"
+  #                 - "iam:GetUserPolicy"
+  #                 - "iam:ListAccessKeys"
+  #                 - "iam:ListAttachedGroupPolicies"
+  #                 - "iam:ListAccountAliases"
+  #                 - "iam:ListAttachedRolePolicies"
+  #                 - "iam:ListAttachedUserPolicies"
+  #                 - "iam:ListEntitiesForPolicy"
+  #                 - "iam:ListGroupPolicies"
+  #                 - "iam:ListGroups"
+  #                 - "iam:ListGroupsForUser"
+  #                 - "iam:ListInstanceProfiles"
+  #                 - "iam:ListMFADevices"
+  #                 - "iam:ListPolicies"
+  #                 - "iam:ListPolicyVersions"
+  #                 - "iam:ListRolePolicies"
+  #                 - "iam:ListRoles"
+  #                 - "iam:ListRoleTags"              
+  #                 - "iam:ListSAMLProviders"
+  #                 - "iam:ListServerCertificates"
+  #                 - "iam:ListSigningCertificates"
+  #                 - "iam:ListUserPolicies"
+  #                 - "iam:ListUsers"
+  #                 - "iam:ListUserTags"         
+  #                 - "kafka:ListClusters"
+  #                 - "kinesis:DescribeStream"
+  #                 - "kinesis:ListShards"
+  #                 - "kinesis:ListStreams"
+  #                 - "kinesis:ListTagsForStream"
+  #                 - "kinesisvideo:DescribeStream"
+  #                 - "kinesisvideo:ListStreams"
+  #                 - "kinesisvideo:ListTagsForStream"
+  #                 - "kms:DescribeKey"
+  #                 - "kms:GetKeyPolicy"
+  #                 - "kms:GetKeyRotationStatus"
+  #                 - "kms:ListAliases"
+  #                 - "kms:ListKeys"
+  #                 - "lambda:GetAccountSettings"
+  #                 - "lambda:ListFunctions"
+  #                 - "lambda:ListTags"
+  #                 - "logs:DescribeLogGroups"
+  #                 - "mq:DescribeBroker"
+  #                 - "mq:ListBrokers"
+
+  # DivvyCloudReadOnlyCustomPolicyC:
+  #   Type: AWS::IAM::ManagedPolicy
+  #   Properties:
+  #     ManagedPolicyName: DivvyCloudReadOnlyCustomPolicyC
+  #     Path: "/admin/federatedroles/"
+  #     Roles:
+  #       - Ref: DivvyCloudReadOnly
+  #     PolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #           -
+  #               Effect: Allow
+  #               Resource: '*'
+  #               Action:
+  #                 - "organizations:DescribeOrganization"
+  #                 - "organizations:DescribePolicy"
+  #                 - "organizations:ListAccounts"
+  #                 - "organizations:ListPolicies"
+  #                 - "organizations:ListTargetsForPolicy"
+  #                 - "pricing:GetProducts"
+  #                 - "rds:DescribeDBClusterSnapshots"
+  #                 - "rds:DescribeDBClusters"
+  #                 - "rds:DescribeDBEngineVersions"
+  #                 - "rds:DescribeDBInstances"
+  #                 - "rds:DescribeDBSnapshots"
+  #                 - "rds:DescribeReservedDBInstances"
+  #                 - "rds:ListTagsForResource"
+  #                 - "redshift:DescribeClusterParameterGroups"
+  #                 - "redshift:DescribeClusterParameters"
+  #                 - "redshift:DescribeClusterSnapshots"
+  #                 - "redshift:DescribeClusters"
+  #                 - "redshift:DescribeLoggingStatus"
+  #                 - "redshift:DescribeTags"
+  #                 - "route53:GetDomainDetail"
+  #                 - "route53:GetHostedZone"
+  #                 - "route53:ListDomains"
+  #                 - "route53:ListGeoLocations"
+  #                 - "route53:ListHealthChecks"
+  #                 - "route53:ListHostedZones"
+  #                 - "route53:ListHostedZonesByName"
+  #                 - "route53:ListResourceRecordSets"
+  #                 - "route53:ListTagsForResource"
+  #                 - "route53:ListTagsForResources"
+  #                 - "route53:ListVPCAssociationAuthorizations"
+  #                 - "route53domains:GetDomainDetail"
+  #                 - "route53domains:ListDomains"
+  #                 - "s3:GetBucketAcl"
+  #                 - "s3:GetBucketCORS"
+  #                 - "s3:GetBucketLocation"
+  #                 - "s3:GetBucketLogging"
+  #                 - "s3:GetBucketPolicy"
+  #                 - "s3:GetBucketPolicyStatus"
+  #                 - "s3:GetBucketTagging"
+  #                 - "s3:GetBucketVersioning"
+  #                 - "s3:GetBucketWebsite"
+  #                 - "s3:GetEncryptionConfiguration"
+  #                 - "s3:GetLifecycleConfiguration"
+  #                 - "s3:GetAccountPublicAccessBlock"
+  #                 - "s3:GetBucketPublicAccessBlock"
+  #                 - "s3:ListAllMyBuckets"
+  #                 - "sagemaker:DescribeNotebookInstance"
+  #                 - "sagemaker:ListNotebookInstances"
+  #                 - "sagemaker:ListTags"
+  #                 - "secretsmanager:DescribeSecret"
+  #                 - "secretsmanager:GetResourcePolicy"
+  #                 - "secretsmanager:ListSecrets"
+  #                 - "ses:GetIdentityDkimAttributes"
+  #                 - "ses:GetIdentityMailFromDomainAttributes"
+  #                 - "ses:GetIdentityNotificationAttributes"
+  #                 - "ses:GetIdentityVerificationAttributes"
+  #                 - "ses:ListIdentities"
+  #                 - "ses:ListIdentityPolicies"
+  #                 - "shield:DescribeEmergencyContactSettings"
+  #                 - "shield:ListAttacks"
+  #                 - "shield:ListProtections"
+  #                 - "sns:GetSubscriptionAttributes"
+  #                 - "sns:GetTopicAttributes"
+  #                 - "sns:ListSubscriptions"
+  #                 - "sns:ListTopics"
+  #                 - "sqs:GetQueueAttributes"
+  #                 - "sqs:ListQueueTags"
+  #                 - "sqs:ListQueues"
+  #                 - "sts:GetCallerIdentity"
+  #                 - "support:*"
+  #                 - "tag:GetResources"
+  #                 - "transfer:DescribeServer"
+  #                 - "transfer:ListServers"              
+  #                 - "workspaces:DescribeTags"
+  #                 - "workspaces:DescribeWorkspaceBundles"
+  #                 - "workspaces:DescribeWorkspaceDirectories"
+  #                 - "workspaces:DescribeWorkspaces"
+  #                 - "workspaces:DescribeWorkspacesConnectionStatus"
+
+
+  NetAdminCustomPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: NetAdminCustomPolicy
+      Path: "/admin/federatedroles/"
+      Roles:
+        - Ref: NetAdmin
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+            -   Effect: Allow
+                Resource: '*'
+                Action:
+                  - 'support:*'
+            -   Effect: Allow
+                Resource: '*'
+                Action:
+                  - 'ec2:*'
+
+  # LogRhythmS3CustomPolicy:
+  #   Type: AWS::IAM::ManagedPolicy
+  #   Properties:
+  #     ManagedPolicyName: LogRhythmS3AccessPolicy
+  #     Path: "/admin/federatedroles/"
+  #     Groups:
+  #       - CXLoyaltyLogRhythmAccessGroup
+  #     PolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #           -   Effect: Allow
+  #               Resource: !Sub 'arn:aws:s3:::${LogRythmS3BucketName}'
+  #               Action:
+  #                 - "s3:GetBucketTagging"
+  #                 - "s3:PutAnalyticsConfiguration"
+  #                 - "s3:GetBucketTagging"
+  #                 - "s3:PutAnalyticsConfiguration"
+  #                 - "s3:GetObjectVersionTagging"
+  #                 - "s3:GetBucketLogging"
+  #                 - "s3:ReplicateTags"
+  #                 - "s3:RestoreObject"
+  #                 - "s3:ListBucket"
+  #                 - "s3:ReplicateObject"
+  #                 - "s3:GetObjectVersionTorrent"
+  #                 - "s3:GetObjectAcl"
+  #                 - "s3:PutBucketTagging"
+  #                 - "s3:GetObjectVersionAcl"
+  #                 - "s3:GetObjectTagging"
+  #                 - "s3:PutObjectTagging"
+  #                 - "s3:HeadBucket"
+  #                 - "s3:PutBucketVersioning"
+  #                 - "s3:DeleteObjectTagging"
+  #                 - "s3:PutMetricsConfiguration"
+  #                 - "s3:PutReplicationConfiguration"
+  #                 - "s3:PutObjectVersionTagging"
+  #                 - "s3:DeleteObjectVersionTagging"
+  #                 - "s3:GetBucketVersioning"
+  #                 - "s3:GetBucketNotification"
+  #                 - "s3:PutObject"
+  #                 - "s3:GetObject"
+  #                 - "s3:PutBucketNotification"
+  #                 - "s3:GetObjectTorrent"
+  #                 - "s3:PutObjectRetention"
+  #                 - "s3:PutBucketLogging"
+  #                 - "s3:GetAnalyticsConfiguration"
+  #                 - "s3:GetObjectVersionForReplication"
+  #                 - "s3:GetObjectVersion"
+                  
+  AffionIPMonitor:
+    Type: AWS::IAM::Role
+    Condition: ConditionalAffionIPMonitorRole
+    Properties:
+      RoleName: Affinion_IP_Monitor_Role
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/CloudWatchEventsReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/SecurityAudit'
+        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/CloudWatchLogsReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                - !Ref AffionIPAdministratorAccountId
+            Action: "sts:AssumeRole"
+            Condition:
+              StringEquals:
+                sts:ExternalId:
+                  - "bXNyd3V6aGVyZQ"
+

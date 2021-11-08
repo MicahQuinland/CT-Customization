@@ -54,3 +54,12 @@ resources:
         #- Custom
     regions:
       - us-east-1
+
+  - name: roles-scp-test
+    resource_file: iam_roles.yaml
+    deploy_method: stack_set
+    deployment_targets:
+      accounts:
+        - 801444601262
+    regions:
+      - us-east-1
