@@ -27,7 +27,7 @@ resources:
     deployment_targets:
       organizational_units:
         # New Essential OU names since ControlTower v2.7 April 16.
-        # Observe the names of your existing OUs and comment out or uncomment these to match yours.
+        # Observe the names of your existing OUs and comment out or uncomment these to match yours
         - Security # Foremerly Core
         - Sandbox # Formerly Custom
         - Enroll OU2
