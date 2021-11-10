@@ -31,6 +31,7 @@ resources:
         - Security # Foremerly Core
         - Sandbox # Formerly Custom
         - Enroll OU2
+        - Nov10DemoOU
         #- Core
         #- Custom
     regions:
@@ -50,6 +51,7 @@ resources:
         - Security # Foremerly Core
         - Sandbox # Formerly Custom
         - Enroll OU2
+        - Nov10DemoOU
         #- Core
         #- Custom
     regions:
