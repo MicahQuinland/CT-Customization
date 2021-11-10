@@ -54,15 +54,3 @@ resources:
         #- Custom
     regions:
       - us-east-1
-
-  - name: CT-exe-cfct
-    resource_file: ControlTowerExecutionRole.template
-    parameters:
-      - parameter_key: RootAccountNumber
-        parameter_value: '545886510617'
-    deploy_method: stack_set
-    deployment_targets:
-      accounts:
-        - 809334837486
-    regions:
-      - us-east-1
